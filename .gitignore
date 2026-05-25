@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# 项目数据（这些不上传，太大或敏感）
+data/cache/
+data/knowledge_base/
+data/history/
+
+# 模型文件
+models/
+*.safetensors
+*.bin
+
+# 日志和临时文件
+*.log
+*.tmp
+temp/
+logs/
+
+# 系统文件
+Thumbs.db
+desktop.ini
+
+# 敏感配置
+.env
+*.key
+*.pem
+config_local.py
