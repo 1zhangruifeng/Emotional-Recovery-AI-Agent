@@ -108,7 +108,7 @@ class HistoryDialog(QDialog):
             with open(self.history_path, 'r', encoding='utf-8') as f:
                 self.history_data = json.load(f)
 
-            for i, item in enumerate(reversed(self.history_data)):
+            for original_idx, item in reversed(list(enumerate(self.history_data))):
                 timestamp = item.get('timestamp', '')
                 if timestamp:
                     try:
@@ -125,7 +125,7 @@ class HistoryDialog(QDialog):
 
                 display_text = f"[{time_str}] {user_input}"
                 list_item = QListWidgetItem(display_text)
-                list_item.setData(Qt.UserRole, i)
+                list_item.setData(Qt.UserRole, original_idx)
                 self.history_list.addItem(list_item)
 
             if self.history_data:
@@ -279,27 +279,23 @@ class HistoryDialog(QDialog):
             else:
                 return
         else:
-            # 英文模式：使用标准问答对话框
-            reply = QMessageBox.question(
-                self, "Export Format",
-                "Select export format:\n\nJSON\nCSV",
-                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
-            )
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Export Format")
+            msg_box.setText("Select export format:")
+            json_btn = msg_box.addButton("JSON", QMessageBox.YesRole)
+            csv_btn = msg_box.addButton("CSV", QMessageBox.NoRole)
+            cancel_btn = msg_box.addButton("Cancel", QMessageBox.RejectRole)
+            msg_box.exec_()
 
-            # 重命名按钮文字
-            yes_button = msg_box.button(QMessageBox.Yes)
-            no_button = msg_box.button(QMessageBox.No)
-            if yes_button:
-                yes_button.setText("JSON")
-            if no_button:
-                no_button.setText("CSV")
-
-            if reply == QMessageBox.Cancel:
+            clicked_btn = msg_box.clickedButton()
+            if clicked_btn == cancel_btn:
                 return
-            elif reply == QMessageBox.Yes:
+            elif clicked_btn == json_btn:
                 file_format = "json"
-            else:
+            elif clicked_btn == csv_btn:
                 file_format = "csv"
+            else:
+                return
 
         # 选择保存路径
         if file_format == "json":

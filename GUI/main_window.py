@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (
     QApplication
 )
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIcon
 
 from GUI.chat_widget import ChatWidget
 from GUI.config_panel import ConfigPanel
@@ -22,6 +23,9 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setGeometry(100, 100, 1300, 800)
+        icon_path = Path(__file__).resolve().parent.parent / "images" / "app_icon.ico"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
 
         # 初始化属性
         self.rag = None
@@ -35,6 +39,8 @@ class MainWindow(QMainWindow):
         # 初始化UI
         self.init_ui()
         self.init_status_bar()
+        if self.config_panel and getattr(self.config_panel, "local_models", None):
+            self.on_local_models_updated(self.config_panel.local_models)
 
         # 加载知识库
         self.load_knowledge_base()
@@ -85,7 +91,7 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
 
         # 初始状态栏消息
-        self.status_bar.showMessage("Ready | Configure API Key on the right")
+        self.status_bar.showMessage("Ready")
 
         # 创建工具栏容器
         toolbar_widget = QWidget()
@@ -141,12 +147,16 @@ class MainWindow(QMainWindow):
         """连接信号"""
         if self.config_panel:
             self.config_panel.config_changed.connect(self.on_config_changed)
-            self.config_panel.agents_updated.connect(self.on_agents_updated)
+            self.config_panel.local_models_updated.connect(self.on_local_models_updated)
             self.config_panel.rag_toggled.connect(self.on_rag_toggled)
             self.config_panel.language_changed.connect(self.update_language)
+            self.config_panel.mode_changed.connect(self.on_mode_changed)
+            if getattr(self.config_panel, "local_models", None):
+                self.on_local_models_updated(self.config_panel.local_models)
 
         if self.chat_widget:
             self.chat_widget.message_received.connect(self.on_message_received)
+            self.chat_widget.runtime_status.connect(self.on_runtime_status)
 
     def load_knowledge_base(self):
         """启动时加载 FAISS 知识库"""
@@ -157,6 +167,18 @@ class MainWindow(QMainWindow):
             success = self.rag.load()
 
             if success:
+                if self.config_panel:
+                    self.config_panel.rag = self.rag
+                    self.config_panel.update_rag_status()
+                    config = self.config_panel.get_config()
+                    if self.chat_widget:
+                        self.chat_widget.set_config(
+                            enable_rag=config.get('enable_rag', True),
+                            rag=self.rag,
+                            local_models=config.get('local_models'),
+                            language=self.current_language,
+                            mode=config.get('mode', 'text')
+                        )
                 if self.current_language == "zh":
                     self.status_bar.showMessage("✅ 知识库已加载")
                 else:
@@ -167,6 +189,9 @@ class MainWindow(QMainWindow):
                 else:
                     self.status_bar.showMessage("⚠️ Knowledge base not found, please run: python scripts/build_knowledge_base.py")
                 self.rag = None
+                if self.config_panel:
+                    self.config_panel.rag = None
+                    self.config_panel.update_rag_status()
         except Exception as e:
             print(f"Failed to load knowledge base: {e}")
             if self.current_language == "zh":
@@ -178,29 +203,41 @@ class MainWindow(QMainWindow):
     def on_config_changed(self):
         """配置变化"""
         if self.current_language == "zh":
-            self.status_bar.showMessage("配置已更新，请点击「初始化 Agent」")
+            self.status_bar.showMessage("配置已更新")
         else:
-            self.status_bar.showMessage("Configuration updated, please click 'Initialize Agent'")
+            self.status_bar.showMessage("Configuration updated")
 
-    def on_agents_updated(self, agents):
-        """Agent 更新"""
+    def on_local_models_updated(self, local_models):
+        """Local model manager updated."""
         config = self.config_panel.get_config() if self.config_panel else {}
 
         if self.chat_widget:
             self.chat_widget.set_config(
-                api_key=config.get('api_key', ''),
-                model_choice=config.get('model_choice', 'gemini'),
                 enable_rag=config.get('enable_rag', True),
                 rag=self.rag,
-                agents=agents,
-                language=self.current_language
+                local_models=local_models,
+                language=self.current_language,
+                mode=config.get('mode', 'text')
             )
 
-        model_name = config.get('model_choice', 'gemini').upper()
         if self.current_language == "zh":
-            self.status_bar.showMessage(f"✅ Agent 已就绪 | 模型: {model_name}")
+            if self.status_bar:
+                self.status_bar.showMessage("✅ 内置多模态功能已就绪")
         else:
-            self.status_bar.showMessage(f"✅ Agent ready | Model: {model_name}")
+            if self.status_bar:
+                self.status_bar.showMessage("✅ Built-in multimodal features ready")
+
+    def on_mode_changed(self, mode):
+        """Assistant mode changed."""
+        if self.chat_widget:
+            self.chat_widget.set_mode(mode)
+        labels = {
+            "text": ("文本助手", "Text assistant"),
+            "voice": ("语音助手", "Voice assistant"),
+            "video": ("视频助手", "Video assistant"),
+        }
+        zh, en = labels.get(mode, labels["text"])
+        self.status_bar.showMessage(f"当前功能: {zh}" if self.current_language == "zh" else f"Current mode: {en}")
 
     def on_rag_toggled(self, enabled):
         """RAG 开关变化"""
@@ -211,7 +248,16 @@ class MainWindow(QMainWindow):
 
     def on_message_received(self, sender, message):
         """收到消息时的处理"""
-        pass
+        ready = "内置多模态功能已就绪" if self.current_language == "zh" else "Built-in multimodal features ready"
+        self.on_runtime_status(ready, False)
+
+    def on_runtime_status(self, message: str, busy: bool = True):
+        """Show model/RAG runtime status in both the status bar and side panel."""
+        if self.status_bar:
+            prefix = "⏳ " if busy else "✅ "
+            self.status_bar.showMessage(prefix + message)
+        if self.config_panel:
+            self.config_panel.set_runtime_status(message, busy)
 
     def show_history(self):
         """显示历史记录对话框"""
@@ -276,6 +322,8 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """关闭窗口时的处理"""
+        if self.chat_widget and hasattr(self.chat_widget, "stop_camera"):
+            self.chat_widget.stop_camera()
         event.accept()
 
 

@@ -1,12 +1,10 @@
 import logging
 import tempfile
 from pathlib import Path
-from typing import List
 import pytesseract
 from PIL import Image
 import cv2
 import numpy as np
-from agno.media import Image as AgnoImage
 
 # 日志配置
 logger = logging.getLogger("emotional_recovery")
@@ -16,15 +14,15 @@ handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
 logger.addHandler(handler)
 
 
-def process_images(files) -> List[AgnoImage]:
-    """将上传文件转成 AgnoImage 列表"""
+def process_images(files) -> list:
+    """将上传文件保存到临时路径，返回本地图片路径列表。"""
     processed = []
     for file in files:
         try:
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.name}")
             tmp.write(file.getvalue())
             tmp.close()
-            processed.append(AgnoImage(filepath=Path(tmp.name)))
+            processed.append({"filepath": Path(tmp.name)})
         except Exception as e:
             logger.error(f"Error processing image {file.name}: {e}")
     return processed
@@ -52,6 +50,13 @@ def ocr_image(file) -> str:
 def classify_issue_type(text: str) -> str:
     """对用户输入的问题进行分类"""
     text_lower = text.lower() if text else ""
+
+    positive_keywords = [
+        '开心', '高兴', '快乐', '很棒', '幸福', '兴奋', '满意', '开心了',
+        'happy', 'glad', 'joy', 'excited', 'great', 'good mood'
+    ]
+    if any(keyword in text_lower for keyword in positive_keywords):
+        return 'positive mood'
 
     categories = {
         'romantic breakup': ['分手', '失恋', '前任', 'ex', '离婚', 'breakup', 'heartbreak'],

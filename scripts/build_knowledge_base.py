@@ -52,14 +52,16 @@ def main():
     print()
     print("=" * 60)
     print("请选择操作:")
-    print("   [1] 爬虫采集 - 从网络爬取心理学知识并更新到数据库")
+    print("   [1] 爬虫采集 - 多源爬取心理学知识并更新到数据库")
     print("   [2] 本地数据集 - 加载 data/datasets/ 目录下的文件并更新到数据库")
+    print("   [3] 重建索引 - 本地数据集 + 增强内置知识，使用新的FAISS检索策略")
+    print("   [4] 清理重复 - 去除已有重复知识并重建索引")
     print("=" * 60)
 
-    choice = input("\n请选择 (1 或 2): ").strip()
+    choice = input("\n请选择 (1 / 2 / 3 / 4): ").strip()
 
-    if choice not in ["1", "2"]:
-        print("❌ 无效选项，请输入 1 或 2")
+    if choice not in ["1", "2", "3", "4"]:
+        print("❌ 无效选项，请输入 1、2、3 或 4")
         return
 
     start_time = time.time()
@@ -67,34 +69,32 @@ def main():
     # 在选项1中，修改爬虫调用方式
     if choice == "1":
         print("\n" + "=" * 60)
-        print("🕷️ 选项1: 爬虫采集（百度百科）")
+        print("🕷️ 选项1: 爬虫采集（多 URL 候选 + 通用正文抽取）")
         print("=" * 60)
-        print("   来源: 百度百科心理学词条")
-        print("   词条数量: 30个")
-        print("   预计耗时: 1-2分钟")
+        print("   来源: 百度百科 / Wikipedia 候选页面")
+        print("   默认关键词: 情绪调节、CBT、正念、失恋恢复、压力管理等")
+        print("   预计耗时: 1-3分钟，取决于网络情况")
         print()
+        custom = input("可选：输入额外关键词（用逗号分隔，直接回车跳过）: ").strip()
+        extra_keywords = [kw.strip() for kw in custom.replace("，", ",").split(",") if kw.strip()]
 
         confirm = input("确认开始爬虫? (y/n，默认y): ").strip().lower()
         if confirm == 'n':
             print("已取消")
             return
 
-        # 直接使用爬虫采集，不经过 build_from_sources
-        from core.crawler import PsychologyCrawler, convert_crawled_to_knowledge
+        keywords = None
+        if extra_keywords:
+            from core.crawler import PsychologyCrawler
+            keywords = PsychologyCrawler().psychology_concepts + extra_keywords
 
-        crawler = PsychologyCrawler()
-        crawled_results = crawler.crawl_all_sources()
-
-        if crawled_results:
-            crawler_knowledge = convert_crawled_to_knowledge(crawled_results)
-            print(f"\n📊 爬虫获取: {len(crawler_knowledge)} 条知识")
-
-            # 增量添加到知识库
-            result = rag.incremental_add(crawler_knowledge, show_progress=True)
-            print(f"\n📈 添加结果: 新增 {result['added']} 条, 重复 {result['duplicates']} 条")
-        else:
-            print("\n⚠️ 没有获取到任何知识")
-            result = {'total': 0, 'added': 0, 'duplicates': 0}
+        result = rag.build_from_sources(
+            use_datasets=False,
+            use_crawler=True,
+            use_builtin=False,
+            crawler_keywords=keywords,
+            incremental=True,
+        )
 
     elif choice == "2":
         # 选项2：本地数据集
@@ -126,6 +126,44 @@ def main():
             use_builtin=False,  # 不使用内置知识（避免重复）
             incremental=True  # 增量模式
         )
+
+    elif choice == "3":
+        print("\n" + "=" * 60)
+        print("🔁 选项3: 重建索引")
+        print("=" * 60)
+        print("   会覆盖现有 FAISS 索引，但不会删除 data/datasets/ 原文件")
+        print("   数据来源: 本地数据集 + 增强内置心理知识")
+        print("   适合本次升级后，把旧 L2 索引重建为新的归一化内积索引")
+        print()
+        confirm = input("确认覆盖重建索引? (y/n，默认n): ").strip().lower()
+        if confirm != 'y':
+            print("已取消")
+            return
+        result = rag.build_from_sources(
+            use_datasets=True,
+            use_crawler=False,
+            use_builtin=True,
+            incremental=False
+        )
+
+    elif choice == "4":
+        print("\n" + "=" * 60)
+        print("🧹 选项4: 清理重复知识")
+        print("=" * 60)
+        print("   会保留唯一知识条目，并重建 FAISS 索引")
+        print()
+        confirm = input("确认清理重复知识? (y/n，默认n): ").strip().lower()
+        if confirm != 'y':
+            print("已取消")
+            return
+        clean = rag.deduplicate_and_rebuild()
+        result = {
+            'total': clean.get('before', 0),
+            'added': 0,
+            'duplicates': clean.get('removed', 0),
+            'total_after': clean.get('after', 0),
+        }
+        print(f"   🧹 已移除重复: {clean.get('removed', 0)} 条")
 
     elapsed_time = time.time() - start_time
 

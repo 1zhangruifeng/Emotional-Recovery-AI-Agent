@@ -1,0 +1,44 @@
+# GUI
+PyQt5>=5.15.0
+
+# Core numerical / vision utilities
+numpy==1.26.4
+opencv-python>=4.8.0
+pillow>=11.1.0
+
+# OCR
+pytesseract>=0.3.10
+
+# RAG / FAISS / embeddings
+faiss-cpu>=1.7.4
+sentence-transformers>=2.2.2
+transformers>=4.52.0
+huggingface-hub>=0.23.0
+packaging==25.0
+tf-keras==2.16.0
+
+# Knowledge-base loading and crawling
+beautifulsoup4>=4.12.0
+requests>=2.31.0
+urllib3>=2.0.0
+jsonlines>=4.0.0
+pdfplumber>=0.11.0
+PyPDF2>=3.0.0
+datasets>=2.18.0
+
+# Audio recording / playback / ASR
+soundfile>=0.12.1
+sounddevice>=0.4.6
+openai-whisper>=20250625
+opencc-python-reimplemented>=0.1.7
+
+# Advanced speech interaction compatibility
+lightning>=2.0.0
+snac>=1.2.0
+
+# CNN-based facial emotion recognition
+tensorflow==2.16.2
+tensorflow-intel==2.16.2
+keras==3.12.2
+protobuf==4.25.9
+ml-dtypes==0.3.2

@@ -111,6 +111,14 @@ class RAGKnowledgeBase:
             crawler_knowledge = self._run_crawler(crawler_keywords)
             all_new_knowledge.extend(crawler_knowledge)
             print(f"   📊 爬虫: {len(crawler_knowledge)} 条")
+            if len(crawler_knowledge) < 5:
+                if incremental and self._has_builtin_knowledge():
+                    print("   ⚠️ 网络爬取较少，已有内置兜底知识，本次不重复追加")
+                else:
+                    print("   ⚠️ 网络爬取较少，自动加入增强内置心理知识作为兜底")
+                    fallback_knowledge = self._load_builtin_knowledge()
+                    all_new_knowledge.extend(fallback_knowledge)
+                    print(f"   📊 兜底知识: {len(fallback_knowledge)} 条")
 
         # 3. 内置知识（兜底）
         if use_builtin:
@@ -154,6 +162,13 @@ class RAGKnowledgeBase:
 
         return result
 
+    def _has_builtin_knowledge(self) -> bool:
+        if not self.is_ready:
+            self.load()
+        if not self.index:
+            return False
+        return any(item.get("source") == "builtin" for item in self.index.knowledge_base)
+
     def _load_available_datasets(self) -> List[Dict]:
         """加载所有可用的公开数据集（支持 PDF、JSON、CSV、TXT、JSONL、MD）"""
         knowledge = []
@@ -161,32 +176,32 @@ class RAGKnowledgeBase:
         datasets_dir.mkdir(parents=True, exist_ok=True)
 
         # PDF文件
-        for pdf_file in datasets_dir.glob("*.pdf"):
+        for pdf_file in datasets_dir.rglob("*.pdf"):
             print(f"   📑 加载PDF: {pdf_file.name}")
             knowledge.extend(self._load_pdf_file(pdf_file))
 
         # JSON文件
-        for json_file in datasets_dir.glob("*.json"):
+        for json_file in datasets_dir.rglob("*.json"):
             print(f"   📄 加载: {json_file.name}")
             knowledge.extend(self._load_json_file(json_file))
 
         # JSONL文件
-        for jsonl_file in datasets_dir.glob("*.jsonl"):
+        for jsonl_file in datasets_dir.rglob("*.jsonl"):
             print(f"   📄 加载: {jsonl_file.name}")
             knowledge.extend(self._load_jsonl_file(jsonl_file))
 
         # CSV文件
-        for csv_file in datasets_dir.glob("*.csv"):
+        for csv_file in datasets_dir.rglob("*.csv"):
             print(f"   📄 加载: {csv_file.name}")
             knowledge.extend(self._load_csv_file(csv_file))
 
         # TXT文件
-        for txt_file in datasets_dir.glob("*.txt"):
+        for txt_file in datasets_dir.rglob("*.txt"):
             print(f"   📄 加载: {txt_file.name}")
             knowledge.extend(self._load_txt_file(txt_file))
 
         # MD文件（Markdown）
-        for md_file in datasets_dir.glob("*.md"):
+        for md_file in datasets_dir.rglob("*.md"):
             print(f"   📄 加载: {md_file.name}")
             knowledge.extend(self._load_txt_file(md_file))
 
@@ -243,12 +258,15 @@ class RAGKnowledgeBase:
 
         return knowledge
 
-    def _split_text_into_chunks(self, text: str, base_title: str, max_chunk_size: int = 1500) -> List[Dict]:
+    def _split_text_into_chunks(self, text: str, base_title: str, max_chunk_size: int = 900) -> List[Dict]:
         """将长文本分割成多个块"""
         chunks = []
+        import re
 
-        # 按双换行分割段落
-        paragraphs = text.split('\n\n')
+        text = re.sub(r'\s+', ' ', text).strip()
+        paragraphs = re.split(r'(?<=[。！？.!?])\s+', text)
+        if len(paragraphs) <= 1:
+            paragraphs = text.split('\n\n')
 
         current_chunk = ""
         chunk_index = 1
@@ -265,7 +283,7 @@ class RAGKnowledgeBase:
                     'content': current_chunk.strip()
                 })
                 chunk_index += 1
-                current_chunk = para
+                current_chunk = current_chunk[-120:] + para
             else:
                 if current_chunk:
                     current_chunk += "\n\n" + para
@@ -296,12 +314,13 @@ class RAGKnowledgeBase:
                     items = [data] if isinstance(data, dict) else []
 
                 for item in items:
-                    content = item.get('content', item.get('text', ''))
+                    content = self._extract_item_content(item)
                     if content and len(content) > 50:
                         knowledge.append({
                             'title': item.get('title', item.get('name', file_path.stem)),
                             'content': content,
                             'source': f"dataset_{file_path.stem}",
+                            'url': item.get('url', ''),
                             'issue_type': self._classify_content(content),
                             'type': 'dataset'
                         })
@@ -316,12 +335,13 @@ class RAGKnowledgeBase:
             import jsonlines
             with jsonlines.open(file_path) as reader:
                 for item in reader:
-                    content = item.get('content', item.get('text', ''))
+                    content = self._extract_item_content(item)
                     if content and len(content) > 50:
                         knowledge.append({
                             'title': item.get('title', item.get('name', file_path.stem)),
                             'content': content,
                             'source': f"dataset_{file_path.stem}",
+                            'url': item.get('url', ''),
                             'issue_type': self._classify_content(content),
                             'type': 'dataset'
                         })
@@ -333,12 +353,13 @@ class RAGKnowledgeBase:
                         line = line.strip()
                         if line:
                             item = json.loads(line)
-                            content = item.get('content', item.get('text', ''))
+                            content = self._extract_item_content(item)
                             if content and len(content) > 50:
                                 knowledge.append({
                                     'title': item.get('title', item.get('name', file_path.stem)),
                                     'content': content,
                                     'source': f"dataset_{file_path.stem}",
+                                    'url': item.get('url', ''),
                                     'issue_type': self._classify_content(content),
                                     'type': 'dataset'
                                 })
@@ -357,7 +378,11 @@ class RAGKnowledgeBase:
                 reader = csv.DictReader(f)
                 for row in reader:
                     # 尝试找内容列
-                    content = row.get('content') or row.get('text') or row.get('article') or ''
+                    content = (
+                        row.get('content') or row.get('text') or row.get('article') or
+                        row.get('body') or row.get('answer') or row.get('response') or
+                        row.get('question') or ''
+                    )
                     if not content:
                         # 取第一列作为内容
                         content = list(row.values())[0] if row else ''
@@ -367,6 +392,7 @@ class RAGKnowledgeBase:
                             'title': row.get('title', row.get('name', file_path.stem)),
                             'content': content,
                             'source': f"dataset_{file_path.stem}",
+                            'url': row.get('url', ''),
                             'issue_type': self._classify_content(content),
                             'type': 'dataset'
                         })
@@ -381,13 +407,12 @@ class RAGKnowledgeBase:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
 
-            # 按双换行分割段落
-            paragraphs = content.split('\n\n')
-            for i, para in enumerate(paragraphs):
-                para = para.strip()
-                if len(para) > 100:
+            chunks = self._split_text_into_chunks(content, file_path.stem)
+            for i, chunk in enumerate(chunks):
+                para = chunk['content'].strip()
+                if len(para) > 80:
                     knowledge.append({
-                        'title': f"{file_path.stem}_{i+1}",
+                        'title': chunk.get('title', f"{file_path.stem}_{i+1}"),
                         'content': para,
                         'source': f"dataset_{file_path.stem}",
                         'issue_type': self._classify_content(para),
@@ -408,33 +433,35 @@ class RAGKnowledgeBase:
                 "分手心理", "失恋恢复", "压力管理", "正念冥想"
             ]
 
-        # 爬取百度百科
-        print("   📖 爬取百度百科...")
-        baike_results = self.crawler.crawl_baike_psychology(keywords[:10])
-        for item in baike_results:
+        print("   📖 爬取网络心理学词条...")
+        crawled_results = self.crawler.crawl_all_sources(keywords)
+        for item in crawled_results:
             knowledge.append({
                 'title': item['title'],
                 'content': item['content'],
                 'source': item['source'],
-                'issue_type': self._classify_content(item['content']),
-                'type': 'crawled',
-                'quality_score': item.get('quality_score', 0.5)
-            })
-
-        # 爬取知乎（快速模式，避免太慢）
-        print("   📝 爬取知乎话题...")
-        zhihu_results = self.crawler.crawl_zhihu_topic(pages=1)
-        for item in zhihu_results:
-            knowledge.append({
-                'title': item['title'],
-                'content': item['content'],
-                'source': item['source'],
+                'url': item.get('url', ''),
                 'issue_type': self._classify_content(item['content']),
                 'type': 'crawled',
                 'quality_score': item.get('quality_score', 0.5)
             })
 
         return knowledge
+
+    def _extract_item_content(self, item: Dict) -> str:
+        fields = [
+            'content', 'text', 'article', 'body', 'description', 'summary',
+            'answer', 'response', 'assistant', 'completion', 'output',
+            'question', 'prompt', 'instruction'
+        ]
+        parts = []
+        for field in fields:
+            value = item.get(field)
+            if isinstance(value, str) and value.strip():
+                parts.append(value.strip())
+            elif isinstance(value, list):
+                parts.extend(str(v).strip() for v in value if str(v).strip())
+        return "\n".join(parts)
 
     def _load_builtin_knowledge(self) -> List[Dict]:
         """加载内置知识库"""
@@ -466,6 +493,46 @@ class RAGKnowledgeBase:
             {"title": "家庭沟通改善技巧",
              "content": "改善家庭沟通的方法：1. 选择合适的沟通时机，避免在情绪激动或疲惫时沟通；2. 表达感受而非指责，使用'我感到...'的句式；3. 尝试理解对方的出发点和立场；4. 建立家庭会议制度，定期交流；5. 必要时寻求专业的家庭治疗师帮助。",
              "source": "builtin", "issue_type": "family issues", "type": "builtin"},
+
+            {"title": "考试焦虑的短时稳定方法",
+             "content": "考试焦虑出现时，可以先把目标从“立刻不焦虑”改成“让身体降一点速”。做三轮呼吸，吸气4秒、停2秒、呼气6秒；再写下最担心的结果，并补一句更平衡的解释，例如“这次考试很重要，但它不是我全部能力的证明”。最后只选择一个可执行动作：复习一道错题、整理一页公式或睡前停止刷题。",
+             "source": "builtin", "issue_type": "academic anxiety", "type": "builtin"},
+
+            {"title": "失恋后的反刍思维处理",
+             "content": "失恋后反复想“如果当时我……”是常见反刍。处理方式不是强行忘记，而是给反刍限定时间：每天固定15分钟写下想法，时间结束后转向具体行为，如洗澡、散步、联系朋友。把问题从“为什么我不值得被爱”改写为“这段关系里我学到了什么、以后需要什么边界”。",
+             "source": "builtin", "issue_type": "romantic breakup", "type": "builtin"},
+
+            {"title": "职场压力的可控圈练习",
+             "content": "面对职场压力时，可以把事情分为三圈：可控、可影响、不可控。可控包括今天先完成哪一步、如何沟通、何时休息；可影响包括和同事协调资源；不可控包括他人的评价和临时变化。行动优先放在可控圈，能减少无助感。",
+             "source": "builtin", "issue_type": "workplace stress", "type": "builtin"},
+
+            {"title": "人际冲突中的非暴力沟通",
+             "content": "非暴力沟通包含观察、感受、需要、请求四步。比如不要说“你总是不尊重我”，可以说“刚才我说话时被打断了两次，我有些受伤，因为我需要被认真听见。下次能不能等我说完再回应？”这种表达降低攻击性，更容易让对方理解真实需求。",
+             "source": "builtin", "issue_type": "interpersonal conflict", "type": "builtin"},
+
+            {"title": "自我关怀的三句话",
+             "content": "自我关怀不是纵容自己，而是在痛苦时用更有效的方式支持自己。可以练习三句话：第一，“我现在确实很难受”；第二，“人在这种处境下难受是正常的”；第三，“我可以先做一个小动作照顾自己”。这能降低羞耻和自责，帮助恢复行动力。",
+             "source": "builtin", "issue_type": "mental health", "type": "builtin"},
+
+            {"title": "睡前焦虑的关闭仪式",
+             "content": "睡前焦虑常来自大脑仍在处理未完成事项。可以建立关闭仪式：写下明天要做的三件事，把担心写在纸上并注明“明天处理”；睡前30分钟远离屏幕；做渐进式肌肉放松，从脚趾到肩膀逐步紧绷再放松。重点是告诉身体今天已经结束。",
+             "source": "builtin", "issue_type": "mental health", "type": "builtin"},
+
+            {"title": "家庭关系中的边界表达",
+             "content": "家庭边界不是冷漠，而是让关系可持续。可以用温和但清楚的句式：“我理解你担心我，但这个决定我想自己负责”；“我愿意听建议，但不接受贬低”；“这个话题我们都激动了，晚点再谈”。边界需要重复表达，不一定一次就被接受。",
+             "source": "builtin", "issue_type": "family issues", "type": "builtin"},
+
+            {"title": "情绪命名降低强度",
+             "content": "把情绪准确命名可以降低情绪强度。与其只说“我很崩溃”，可以区分是委屈、害怕、羞耻、愤怒、失望还是孤独。命名后再问：这个情绪在保护我什么？它希望我注意什么？这样能从被情绪淹没，转向理解情绪的信息。",
+             "source": "builtin", "issue_type": "mental health", "type": "builtin"},
+
+            {"title": "低动力时期的行为激活",
+             "content": "情绪低落时等待动力出现往往很难。行为激活建议先做极小行动，再让行动带来一点动力。可以选择2分钟任务：打开窗户、倒一杯水、洗脸、把桌面清出一个角落、走到楼下。完成后记录“我做到了”，强化可控感。",
+             "source": "builtin", "issue_type": "mental health", "type": "builtin"},
+
+            {"title": "危机风险识别与求助",
+             "content": "如果出现持续的自伤念头、明确计划、无法保证自己安全，应该立即联系身边可信任的人，并寻求当地急救、危机热线或专业医疗帮助。AI助手只能提供支持性陪伴，不能替代危机干预。安全优先于隐私和面子。",
+             "source": "builtin", "issue_type": "mental health", "type": "builtin"},
         ]
         return builtin_knowledge
 
@@ -488,10 +555,143 @@ class RAGKnowledgeBase:
         return 'general'
 
     def search(self, query: str, issue_type: str = None, k: int = 3) -> List[Dict]:
-        """搜索相关知识"""
+        """搜索相关知识。
+
+        The vector index can return very weak matches when the knowledge base is
+        small. We keep the threshold conservative so generic entries such as
+        relaxation exercises do not appear for every query.
+        """
         if not self.is_ready:
             return []
-        return self.index.search(query, k=k, issue_type=issue_type, min_score=0.15)
+        candidates = self.index.search(
+            query,
+            k=max(k * 3, 6),
+            issue_type=issue_type,
+            min_score=0.18,
+        )
+        ranked = []
+        for item in candidates:
+            score = float(item.get("score", 0.0))
+            if self._is_low_value_emotion_sample(item):
+                continue
+            if self._is_low_value_relaxation(item):
+                continue
+            adjusted_score = score
+            item_issue = item.get("issue_type", "general")
+            if issue_type and item_issue == issue_type:
+                adjusted_score += 0.08
+            if self._has_query_overlap(query, item):
+                adjusted_score += 0.04
+            if self._is_over_generic_relaxation(query, item):
+                adjusted_score -= 0.12
+            if adjusted_score >= 0.26:
+                item = dict(item)
+                item["score"] = adjusted_score
+                item["raw_score"] = score
+                ranked.append(item)
+
+        if len(ranked) < k:
+            seen = {item.get("id") for item in ranked}
+            for item in self._keyword_fallback(query, issue_type):
+                if item.get("id") in seen:
+                    continue
+                ranked.append(item)
+                seen.add(item.get("id"))
+                if len(ranked) >= k:
+                    break
+
+        ranked.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+        return ranked[:k]
+
+    def _has_query_overlap(self, query: str, item: Dict) -> bool:
+        query = (query or "").lower()
+        text = f"{item.get('title', '')} {item.get('content', '')}".lower()
+        keywords = [
+            "开心", "高兴", "快乐", "难过", "伤心", "焦虑", "压力", "紧张", "睡眠",
+            "考试", "学习", "工作", "分手", "失恋", "家庭", "父母", "朋友", "冲突",
+            "happy", "sad", "anxiety", "stress", "exam", "study", "work", "breakup",
+            "family", "conflict", "sleep", "relax",
+        ]
+        return any(word in query and word in text for word in keywords)
+
+    def _is_over_generic_relaxation(self, query: str, item: Dict) -> bool:
+        title = (item.get("title") or "").strip().lower()
+        if "放松" not in title and "relax" not in title:
+            return False
+        query = (query or "").lower()
+        relaxation_triggers = [
+            "放松", "压力", "焦虑", "紧张", "失眠", "睡眠", "呼吸", "崩溃", "累",
+            "stress", "anxiety", "tense", "sleep", "breath", "relax", "overwhelmed",
+        ]
+        return not any(word in query for word in relaxation_triggers)
+
+    def _is_low_value_relaxation(self, item: Dict) -> bool:
+        title = (item.get("title") or "").strip().lower()
+        if title not in ("放松", "relax", "relaxation"):
+            return False
+        content = (item.get("content") or "").lower()
+        useful_terms = ["呼吸", "肌肉", "焦虑", "压力", "正念", "冥想", "练习", "breath", "stress", "anxiety", "practice"]
+        return not any(term in content for term in useful_terms)
+
+    def _is_low_value_emotion_sample(self, item: Dict) -> bool:
+        source = (item.get("source") or "").lower()
+        title = (item.get("title") or "").lower()
+        if "goemotions" in source:
+            return True
+        if title.startswith("情感表达_") or title.startswith("emotion_"):
+            return True
+        return False
+
+    def _keyword_fallback(self, query: str, issue_type: str = None) -> List[Dict]:
+        if not self.index:
+            return []
+        query = (query or "").lower()
+        groups = [
+            (["考试", "学习", "学业", "没考好", "exam", "study"], ["认知行为疗法", "CBT", "共情"]),
+            (["焦虑", "紧张", "担心", "慌", "anxiety", "nervous", "worried"], ["焦虑", "正念", "冥想", "认知行为疗法", "CBT"]),
+            (["压力", "累", "崩溃", "睡不着", "失眠", "sleep", "stress", "overwhelmed"], ["心理压力", "睡眠", "正念", "冥想", "焦虑"]),
+            (["分手", "失恋", "前任", "breakup", "heartbreak"], ["分手", "情感", "情绪"]),
+            (["朋友", "冲突", "吵架", "人际", "社交", "conflict", "friend"], ["人际关系", "社交", "共情"]),
+            (["家庭", "父母", "家人", "family", "parent"], ["共情", "认知行为疗法", "心理健康"]),
+        ]
+        active_terms = []
+        preferred_titles = []
+        for triggers, titles in groups:
+            if any(term in query for term in triggers):
+                active_terms.extend(triggers)
+                preferred_titles.extend(titles)
+        if not preferred_titles:
+            return []
+
+        results = []
+        for idx, item in enumerate(self.index.knowledge_base):
+            if self._is_low_value_emotion_sample(item):
+                continue
+            if self._is_low_value_relaxation(item):
+                continue
+            item_issue = item.get("issue_type", "general")
+            if issue_type and item_issue not in (issue_type, "general", "mental health"):
+                continue
+            title = item.get("title", "")
+            content = item.get("content", "")
+            haystack = f"{title} {content}".lower()
+            score = 0.0
+            if any(title_key.lower() in title.lower() or title_key.lower() in haystack for title_key in preferred_titles):
+                score += 0.32
+            score += min(0.12, 0.03 * sum(1 for term in active_terms if term in haystack))
+            if score >= 0.30:
+                results.append({
+                    "id": item.get("id", idx),
+                    "content": content,
+                    "title": title or "未命名",
+                    "source": item.get("source", "unknown"),
+                    "score": score,
+                    "raw_score": 0.0,
+                    "type": item.get("type", "unknown"),
+                    "issue_type": item_issue,
+                })
+        results.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+        return results
 
     def add_knowledge(self, title: str, content: str, source: str = "manual",
                       issue_type: str = "general"):
@@ -508,6 +708,18 @@ class RAGKnowledgeBase:
         }
 
         result = self.incremental_add([new_item], show_progress=False)
+        return result
+
+    def deduplicate_and_rebuild(self) -> Dict:
+        """清理已有重复知识并重建 FAISS 索引。"""
+        if not self.is_ready:
+            self.load()
+        if not self.index:
+            return {'before': 0, 'after': 0, 'removed': 0}
+        result = self.index.deduplicate_existing_items()
+        if result.get('removed', 0) > 0:
+            self.index.save(str(self.index_path))
+            self.is_ready = True
         return result
 
     def get_stats(self) -> Dict:
