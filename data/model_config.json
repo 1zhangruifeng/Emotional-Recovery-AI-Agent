@@ -1,0 +1,12 @@
+{
+  "speech_interaction_project": "third_party/speech_interaction",
+  "speech_generation_checkpoint": "models/speech_generation",
+  "speech_recognition_model_path": "models/speech_recognition_small/small.pt",
+  "speech_device": "cuda:0",
+  "facial_expression_project": "third_party/facial_expression_recognition",
+  "text_sentiment_project": "third_party/text_sentiment_recognition",
+  "text_sentiment_model_path": "models/text_sentiment_classifier",
+  "text_sentiment_server_url": "",
+  "local_dialogue_model_path": "",
+  "output_dir": "data/voice_outputs"
+}

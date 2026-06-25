@@ -1,0 +1,42 @@
+add_qkv_bias: true
+asr_adapter: llamamlp
+attn_dropout: 0.0
+bias: false
+block_size: 2048
+force_align: false
+gelu_approximate: none
+head_size: 64
+hf_config:
+  name: Qwen2-0.5B
+  org: Qwen
+intermediate_size: 4864
+lm_head_bias: false
+mlp_class_name: LLaMAMLP
+n_embd: 896
+n_expert: 0
+n_expert_per_token: 0
+n_head: 14
+n_layer: 24
+n_query_groups: 2
+name: Qwen2-0.5B
+norm_class_name: RMSNorm
+norm_eps: 1.0e-06
+padded_vocab_size: 181120
+padding_multiple: 512
+parallel_residual: false
+pos_type: rope
+post_adapter: false
+post_adapter_layers: 6
+prompt_vocab_size: null
+rope_base: 1000000
+rope_condense_ratio: 1
+rotary_percentage: 1
+scale_embeddings: false
+shared_attention_norm: false
+tie_word_embeddings: true
+use_pretrain_phoneme_emb: false
+vocab_size: 50254
+text_vocab_size: 152000
+cat_audio_vocab_size: 29120
+audio_vocab_size: 4160
+whisper_adapter_dim: 768

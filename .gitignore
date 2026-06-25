@@ -24,6 +24,8 @@ data/voice_outputs/
 
 # 模型缓存和临时下载文件
 models/**/.cache/
+models/speech_generation/lit_model.pth
+models/speech_generation/lit_model.pth.tmp
 
 # 日志和临时文件
 *.log
