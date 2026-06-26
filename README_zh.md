@@ -176,10 +176,10 @@ python main.py
 │   ├── crawler.py          # 心理学知识爬虫
 │   └── utils.py            # OCR、分类等工具
 ├── scripts/
-│   ├── build_knowledge_base.py
-│   ├── show_knowledge_stats.py
-│   ├── download_datasets.py
-│   └── train_local_models.py
+│   ├── build_knowledge_base.py  # 构建 / 更新 RAG 知识库与 FAISS 索引
+│   ├── show_knowledge_stats.py  # 查看知识库条目数量、来源和统计信息
+│   ├── download_datasets.py     # 下载公开情感数据集到本地数据目录
+│   └── train_local_models.py    # 本地模型训练入口示例
 ├── third_party/
 │   ├── speech_interaction/             # 语音交互算法源码
 │   ├── facial_expression_recognition/  # 面部表情识别算法源码

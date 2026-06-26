@@ -176,10 +176,10 @@ repository root/
 │   ├── crawler.py          # Psychology knowledge crawler
 │   └── utils.py            # OCR and helper utilities
 ├── scripts/
-│   ├── build_knowledge_base.py
-│   ├── show_knowledge_stats.py
-│   ├── download_datasets.py
-│   └── train_local_models.py
+│   ├── build_knowledge_base.py  # Build / update the RAG knowledge base and FAISS index
+│   ├── show_knowledge_stats.py  # Show knowledge-base counts, sources, and statistics
+│   ├── download_datasets.py     # Download public emotion datasets into the local data folder
+│   └── train_local_models.py    # Example entry point for local model training
 ├── third_party/
 │   ├── speech_interaction/             # Speech interaction algorithm source
 │   ├── facial_expression_recognition/  # Facial expression algorithm source
