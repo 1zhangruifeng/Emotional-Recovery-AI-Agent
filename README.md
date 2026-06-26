@@ -4,7 +4,7 @@
 
 This project is a local multimodal emotional recovery AI Agent. It integrates text sentiment recognition, speech recognition, voice reply generation, camera-based facial emotion recognition, OCR, RAG retrieval, and a FAISS vector database into one desktop application for structured, warm, and actionable emotional support.
 
-The project is organized as a self-contained folder. Application code, algorithm source code, local model weights, knowledge-base indexes, history records, and configuration files live under `group work plus/`. To share or upload the project, keep this folder structure intact.
+The project is organized as a self-contained repository. Application code, algorithm source code, local model weights, knowledge-base indexes, history records, and configuration files live under the repository root. To share or upload the project, keep the current repository structure intact.
 
 ## Interface
 
@@ -169,7 +169,7 @@ During first use, model loading status is displayed in the GUI, such as speech m
 ## Project Structure
 
 ```text
-group work plus/
+repository root/
 ├── GUI/                    # PyQt5 interface
 ├── core/
 │   ├── local_models.py     # Local multimodal model adapters
