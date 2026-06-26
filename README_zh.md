@@ -81,6 +81,26 @@
 | 数据集加载 | JSON / JSONL / CSV / TXT / MD / PDF | 递归读取 `data/datasets/`，自动识别常见文本字段。 |
 | 历史记录 | JSON 本地存储 | 保存用户输入、AI 回复、问题类型、模式和语言。 |
 
+## Clone 注意事项
+
+本项目包含本地模型权重，模型文件使用 Git LFS 管理。克隆项目之前请先安装并启用 Git LFS：
+
+```powershell
+git lfs install
+git clone https://github.com/1zhangruifeng/Emotional-Recovery-AI-Agent.git
+```
+
+如果没有安装 Git LFS，`models/` 下的模型文件可能只会下载成指针文本，程序将无法正常加载模型。
+
+其中语音生成模型文件较大，已拆分为：
+
+```text
+models/speech_generation/lit_model.pth.part001
+models/speech_generation/lit_model.pth.part002
+```
+
+程序首次加载语音模型时会自动合并为 `models/speech_generation/lit_model.pth`，用户不需要手动处理。
+
 ## 安装依赖
 
 安装 Python 依赖：

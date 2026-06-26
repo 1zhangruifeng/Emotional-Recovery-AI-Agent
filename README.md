@@ -81,6 +81,26 @@ The project is organized as a self-contained folder. Application code, algorithm
 | Dataset Loader | JSON / JSONL / CSV / TXT / MD / PDF | Recursively loads `data/datasets/` and detects common text fields. |
 | History | Local JSON storage | Stores user input, AI replies, issue type, mode, and language. |
 
+## Clone Notice
+
+This project includes local model weights managed by Git LFS. Install and enable Git LFS before cloning:
+
+```powershell
+git lfs install
+git clone https://github.com/1zhangruifeng/Emotional-Recovery-AI-Agent.git
+```
+
+Without Git LFS, files under `models/` may be downloaded as pointer text files, and the app will not be able to load the models correctly.
+
+The speech generation model is larger than the GitHub LFS single-file limit, so it is stored as split parts:
+
+```text
+models/speech_generation/lit_model.pth.part001
+models/speech_generation/lit_model.pth.part002
+```
+
+When the speech model is first loaded, the app automatically rebuilds `models/speech_generation/lit_model.pth` from these parts. No manual merge is required.
+
 ## Installation
 
 Install Python dependencies:
