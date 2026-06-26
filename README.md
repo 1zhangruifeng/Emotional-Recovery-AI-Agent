@@ -4,8 +4,6 @@
 
 This project is a local multimodal emotional recovery AI Agent. It integrates text sentiment recognition, speech recognition, voice reply generation, camera-based facial emotion recognition, OCR, RAG retrieval, and a FAISS vector database into one desktop application for structured, warm, and actionable emotional support.
 
-The project is organized as a self-contained repository. Application code, algorithm source code, local model weights, knowledge-base indexes, history records, and configuration files live under the repository root. To share or upload the project, keep the current repository structure intact.
-
 ## Interface
 
 ![Overall Interface](./images/2.png)
